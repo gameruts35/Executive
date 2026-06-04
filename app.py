@@ -5,7 +5,11 @@ import time
 import threading
 import streamlit as st
 from dotenv import load_dotenv
-from streamlit.runtime.scriptrunner import get_script_run_context, add_script_run_context
+
+try:
+    from streamlit.runtime.scriptrunner_utils.script_run_context import get_script_run_ctx, add_script_run_ctx
+except ImportError:
+    from streamlit.runtime.scriptrunner import get_script_run_ctx, add_script_run_ctx
 
 # Ensure the local src folder can be imported
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -66,7 +70,7 @@ class StdoutRedirector:
         self.stream = io.StringIO()
         self.original_stdout = sys.stdout
         # Store context from main thread
-        self.context = get_script_run_context()
+        self.context = get_script_run_ctx()
 
     def write(self, data):
         self.stream.write(data)
@@ -75,8 +79,8 @@ class StdoutRedirector:
         # Associate main thread context with current worker thread if missing
         if self.context:
             current_thread = threading.current_thread()
-            if get_script_run_context() is None:
-                add_script_run_context(current_thread, self.context)
+            if get_script_run_ctx() is None:
+                add_script_run_ctx(current_thread, self.context)
                 
         try:
             # Update the Streamlit placeholder with the accumulated log
