@@ -2,8 +2,10 @@ import os
 import sys
 import io
 import time
+import threading
 import streamlit as st
 from dotenv import load_dotenv
+from streamlit.runtime.scriptrunner import get_script_run_context, add_script_run_context
 
 # Ensure the local src folder can be imported
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -57,23 +59,36 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Helper: Redirect stdout to capture agent thoughts in real-time
+# Helper: Redirect stdout to capture agent thoughts in real-time safely across multiple threads
 class StdoutRedirector:
     def __init__(self, placeholder):
         self.placeholder = placeholder
         self.stream = io.StringIO()
         self.original_stdout = sys.stdout
+        # Store context from main thread
+        self.context = get_script_run_context()
 
     def write(self, data):
         self.stream.write(data)
-        # Update the Streamlit placeholder with the accumulated log
-        self.placeholder.text_area(
-            "Agent Thought Process & Execution Logs",
-            value=self.stream.getvalue(),
-            height=300,
-            disabled=True
-        )
         self.original_stdout.write(data)
+        
+        # Associate main thread context with current worker thread if missing
+        if self.context:
+            current_thread = threading.current_thread()
+            if get_script_run_context() is None:
+                add_script_run_context(current_thread, self.context)
+                
+        try:
+            # Update the Streamlit placeholder with the accumulated log
+            self.placeholder.text_area(
+                "Agent Thought Process & Execution Logs",
+                value=self.stream.getvalue(),
+                height=300,
+                disabled=True
+            )
+        except Exception:
+            # Silently fallback if context registration fails or UI is closed
+            pass
 
     def flush(self):
         self.original_stdout.flush()
